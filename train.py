@@ -67,6 +67,7 @@ def parse_args():
     # misc
     parser.add_argument('--seed', default=1, type=int)
     parser.add_argument('--work_dir', default='.', type=str)
+    parser.add_argument('--exp_name', default='default', type=str)
     parser.add_argument('--save_tb', default=False, action='store_true')
     parser.add_argument('--save_buffer', default=False, action='store_true')
     parser.add_argument('--save_video', default=False, action='store_true')
@@ -176,9 +177,7 @@ def main():
     ts = time.gmtime() 
     ts = time.strftime("%m-%d", ts)    
     env_name = args.domain_name + '-' + args.task_name
-    exp_name = env_name + '-' + ts + '-im' + str(args.image_size) +'-b'  \
-    + str(args.batch_size) + '-s' + str(args.seed)  + '-' + args.encoder_type
-    args.work_dir = args.work_dir + '/'  + exp_name
+    args.work_dir = args.work_dir + '/'  + args.exp_name
 
     utils.make_dir(args.work_dir)
     video_dir = utils.make_dir(os.path.join(args.work_dir, 'video'))
@@ -187,8 +186,8 @@ def main():
 
     video = VideoRecorder(video_dir if args.save_video else None)
 
-    with open(os.path.join(args.work_dir, 'args.json'), 'w') as f:
-        json.dump(vars(args), f, sort_keys=True, indent=4)
+    #with open(os.path.join(args.work_dir, 'args.json'), 'w') as f:
+        #json.dump(vars(args), f, sort_keys=True, indent=4)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
