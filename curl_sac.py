@@ -187,14 +187,19 @@ class CURL(nn.Module):
     CURL
     """
 
-    def __init__(self, obs_shape, z_dim, batch_size, critic, critic_target, output_type="continuous"):
+    def __init__(self, obs_shape, action_shape, z_dim, batch_size, critic, critic_target, output_type="continuous"):
         super(CURL, self).__init__()
         self.batch_size = batch_size
 
         self.encoder = critic.encoder
 
         self.encoder_target = critic_target.encoder 
-
+        
+        self.proj = nn.Sequential(
+            nn.Linear(z_dim + action_shape[0], 512), nn.ReLU(),
+            nn.Linear(512, z_dim)
+        )
+        
         self.W = nn.Parameter(torch.rand(z_dim, z_dim))
         self.output_type = output_type
 
@@ -213,6 +218,12 @@ class CURL(nn.Module):
         if detach:
             z_out = z_out.detach()
         return z_out
+    
+    def project(self, x, a):
+        x = torch.concat([x,a], dim=-1)
+        return self.proj(x)
+            
+        
 
     def compute_logits(self, z_a, z_pos):
         """
@@ -313,7 +324,7 @@ class CurlSacAgent(object):
 
         if self.encoder_type == 'pixel':
             # create CURL encoder (the 128 batch size is probably unnecessary)
-            self.CURL = CURL(obs_shape, encoder_feature_dim,
+            self.CURL = CURL(obs_shape, action_shape, encoder_feature_dim,
                         self.curl_latent_dim, self.critic,self.critic_target, output_type='continuous').to(self.device)
 
             # optimizer for critic encoder for reconstruction loss
@@ -414,11 +425,17 @@ class CurlSacAgent(object):
             L.log('train_alpha/value', self.alpha, step)
         alpha_loss.backward()
         self.log_alpha_optimizer.step()
-
+    
     def update_cpc(self, obs_anchor, obs_pos, cpc_kwargs, L, step):
         
         z_a = self.CURL.encode(obs_anchor)
         z_pos = self.CURL.encode(obs_pos, ema=True)
+        next_z = self.CURL.encode(cpc_kwargs['next_obses'], ema=True)
+        curr_za = self.CURL.project(z_a, cpc_kwargs['actions'])
+        ### Compute loss for consistency 
+        logits = self.CURL.compute_logits(curr_za, next_z)
+        labels = torch.arange(logits.shape[0]).long().to(self.device)
+        consistency_loss = self.cross_entropy_loss(logits, labels)
         
         logits = self.CURL.compute_logits(z_a, z_pos)
         labels = torch.arange(logits.shape[0]).long().to(self.device)
@@ -426,12 +443,13 @@ class CurlSacAgent(object):
         
         self.encoder_optimizer.zero_grad()
         self.cpc_optimizer.zero_grad()
-        loss.backward()
+        (consistency_loss + loss).backward()
 
         self.encoder_optimizer.step()
         self.cpc_optimizer.step()
         if step % self.log_interval == 0:
             L.log('train/curl_loss', loss, step)
+            L.log('train/consistency_loss', consistency_loss, step)
 
 
     def update(self, replay_buffer, L, step):
@@ -484,4 +502,5 @@ class CurlSacAgent(object):
         self.critic.load_state_dict(
             torch.load('%s/critic_%s.pt' % (model_dir, step))
         )
+ 
  
