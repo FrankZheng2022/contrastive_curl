@@ -145,6 +145,7 @@ class ReplayBuffer(Dataset):
 
         pos = torch.as_tensor(pos, device=self.device).float()
         cpc_kwargs = dict(obs_anchor=obses, obs_pos=pos,
+                          next_obses = next_obses, actions=actions,
                           time_anchor=None, time_pos=None)
 
         return obses, actions, rewards, next_obses, not_dones, cpc_kwargs
@@ -259,6 +260,5 @@ def center_crop_image(image, output_size):
 
     image = image[:, top:top + new_h, left:left + new_w]
     return image
-
 
 
